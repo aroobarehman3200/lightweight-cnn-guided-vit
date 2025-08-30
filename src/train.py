@@ -21,6 +21,10 @@ def main():
     train_loader = DataLoader(train_ds, batch_size=8, shuffle=True, num_workers=4, pin_memory=True)
     val_loader   = DataLoader(val_ds,   batch_size=8, shuffle=False, num_workers=4, pin_memory=True)
 
+    test_split = dataset["test"] if "test" in dataset else dataset["validation"]
+    test_ds     = MiniImageNetFusionDataset(test_split)
+    test_loader = DataLoader(test_ds, batch_size=8, shuffle=False, num_workers=4, pin_memory=True)
+
     # ---------- models ----------
     vit = ViTModel.from_pretrained("google/vit-base-patch16-224")
     resnet = nn.Sequential(*list(resnet50(weights=ResNet50_Weights.IMAGENET1K_V1).children())[:-2])
