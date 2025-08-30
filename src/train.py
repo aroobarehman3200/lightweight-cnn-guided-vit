@@ -103,5 +103,71 @@ def main():
     torch.save(model.state_dict(), "outputs/fusion_classifier.pt")
     print("Saved: outputs/training_history.csv, plots & model in outputs/")
 
+    # ====== TEST EVALUATION ======
+    from sklearn.metrics import f1_score, precision_score, recall_score, confusion_matrix
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    from tqdm import tqdm
+    import numpy as np
+    
+    model.eval()
+    
+    correct_top1 = 0
+    correct_top5 = 0
+    total = 0
+    
+    all_preds = []
+    all_labels = []
+    
+    with torch.no_grad():
+        for x_resnet, x_vit, labels in tqdm(test_loader, desc="Testing"):
+            x_resnet, x_vit, labels = x_resnet.to(device), x_vit.to(device), labels.to(device)
+    
+            # FusionClassifier returns logits directly
+            outputs = model(x_resnet, x_vit)          # (B, num_classes)
+    
+            # Top-1
+            _, top1_preds = outputs.topk(1, dim=1)
+            correct_top1 += (top1_preds.squeeze(1) == labels).sum().item()
+    
+            # Top-5
+            _, top5_preds = outputs.topk(5, dim=1)
+            correct_top5 += top5_preds.eq(labels.view(-1, 1)).sum().item()
+    
+            # For F1, precision, recall
+            all_preds.extend(outputs.argmax(dim=1).cpu().numpy())
+            all_labels.extend(labels.cpu().numpy())
+    
+            total += labels.size(0)
+    
+    # Metrics
+    top1_acc = 100.0 * correct_top1 / total
+    top5_acc = 100.0 * correct_top5 / total
+    f1       = f1_score(all_labels, all_preds, average='weighted')
+    precision= precision_score(all_labels, all_preds, average='weighted')
+    recall   = recall_score(all_labels, all_preds, average='weighted')
+    cm       = confusion_matrix(all_labels, all_preds)
+    
+    print(f"\n[TEST] Top-1: {top1_acc:.2f}% | Top-5: {top5_acc:.2f}%")
+    print(f"[TEST] F1 (weighted): {f1:.4f} | Precision (weighted): {precision:.4f} | Recall (weighted): {recall:.4f}")
+    
+    # Confusion matrix (100x100 can be dense; keep ticks off)
+    plt.figure(figsize=(12, 10))
+    sns.heatmap(cm, cmap='Blues', xticklabels=False, yticklabels=False)
+    plt.title("Confusion Matrix (Test)")
+    plt.xlabel("Predicted"); plt.ylabel("True")
+    plt.tight_layout()
+    plt.savefig("outputs/confusion_matrix_test.png", dpi=300)
+    
+    # Optional normalized CM for readability
+    cm_norm = cm.astype(np.float32) / cm.sum(axis=1, keepdims=True).clip(min=1)
+    plt.figure(figsize=(12, 10))
+    sns.heatmap(cm_norm, cmap='Blues', xticklabels=False, yticklabels=False)
+    plt.title("Normalized Confusion Matrix (Test)")
+    plt.xlabel("Predicted"); plt.ylabel("True")
+    plt.tight_layout()
+    plt.savefig("outputs/confusion_matrix_test_normalized.png", dpi=300)
+
+
 if __name__ == "__main__":
     main()
